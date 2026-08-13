@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
-import { DANA_REYES } from "@/lib/personas/dana-reyes";
+import { useEffect, useMemo, useState } from "react";
+import type { CounterpartSummary } from "@/lib/backend";
 import { useRehearsalSession } from "@/lib/voice/useRehearsalSession";
+import { AddCounterpart } from "./AddCounterpart";
+import { CounterpartPicker } from "./CounterpartPicker";
 import { MicOrb } from "./MicOrb";
 import { TestBench } from "./TestBench";
 import { TraitPanel } from "./TraitPanel";
@@ -17,14 +19,39 @@ const PHASE_LABEL: Record<string, string> = {
 };
 
 export function RehearsalStage() {
-  const persona = DANA_REYES;
-  // Stable for the life of the tab; the backend keys memory off this.
+  const [people, setPeople] = useState<CounterpartSummary[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/counterparts")
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const list: CounterpartSummary[] = data.counterparts ?? [];
+        setPeople(list);
+        setSelectedId((current) => current ?? list[0]?._id ?? null);
+        if (data.error) setLoadError(data.error);
+      })
+      .catch(() => !cancelled && setLoadError("Could not reach the backend."));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const person = people.find((p) => p._id === selectedId) ?? null;
+
+  // Switching person starts a new session, so memory and transcript don't bleed.
   const sessionId = useMemo(
-    () => `s-${Math.random().toString(36).slice(2, 10)}`,
-    [],
+    () => `s-${selectedId ?? "none"}-${Math.random().toString(36).slice(2, 8)}`,
+    [selectedId],
   );
 
-  const session = useRehearsalSession({ sessionId, personaId: persona.id });
+  const session = useRehearsalSession({
+    sessionId,
+    personaId: selectedId ?? "dana-reyes",
+  });
   const live = session.phase !== "idle";
 
   return (
@@ -32,8 +59,10 @@ export function RehearsalStage() {
       <main className="stage">
         <header className="stage__head">
           <div>
-            <h1>{persona.name}</h1>
-            <p className="stage__role">{persona.role}</p>
+            <h1>{person?.name ?? "Rehearsal Room"}</h1>
+            <p className="stage__role">
+              {person?.role ?? "Loading counterparts…"}
+            </p>
           </div>
           <div className={`stage__phase stage__phase--${session.phase}`}>
             <span className="dot" aria-hidden />
@@ -41,8 +70,35 @@ export function RehearsalStage() {
           </div>
         </header>
 
-        <p className="stage__scene">{persona.scene}</p>
+        <CounterpartPicker
+          people={people}
+          selectedId={selectedId}
+          disabled={live}
+          onSelect={setSelectedId}
+        />
 
+        {!live && (
+          <AddCounterpart
+            onCreated={(created) => {
+              setPeople((prev) => [...prev, created]);
+              setSelectedId(created._id);
+            }}
+          />
+        )}
+
+        {person && (
+          <p className="stage__scene">
+            {person.scenario}
+            {person.userRole && (
+              <>
+                {" "}
+                <span className="stage__you">You are {person.userRole}.</span>
+              </>
+            )}
+          </p>
+        )}
+
+        {loadError && <p className="stage__error">{loadError}</p>}
         {!session.micSupported && (
           <p className="stage__error">
             This browser has no Web Speech API. Open the demo in Chrome or Edge.
@@ -68,7 +124,7 @@ export function RehearsalStage() {
               <button
                 className="btn btn--primary"
                 onClick={session.start}
-                disabled={!session.micSupported}
+                disabled={!session.micSupported || !person}
               >
                 Start rehearsal
               </button>
@@ -79,7 +135,7 @@ export function RehearsalStage() {
               onMouseDown={session.interrupt}
               onMouseUp={session.cancelInterrupt}
               disabled={!live}
-              title="Hold to cut her off and give a note"
+              title="Hold to cut them off and give a note"
             >
               Hold D — Director interrupt
             </button>
