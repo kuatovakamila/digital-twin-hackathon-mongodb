@@ -18,9 +18,17 @@ const EXIT_MS = 600;
 const GLOW_MS = 2000;
 
 interface TraitsResponse {
+  counterpartId: string;
   activeTraits: Trait[];
   evidence: Evidence[];
   error?: string;
+}
+
+interface TraitPanelProps {
+  /** Whose model to show. Null while the picker is still resolving. */
+  counterpartId?: string | null;
+  /** Changes when a correction is written, which forces an immediate refetch. */
+  refreshSignal?: string | null;
 }
 
 type SlotPhase = "live" | "exiting" | "entering";
@@ -96,7 +104,7 @@ function reconcile(prev: Slot[], next: Trait[], firstLoad: boolean): Reconciled 
   return { slots, reveals, drops, settles };
 }
 
-export function TraitPanel({ refreshSignal }: { refreshSignal?: string | null }) {
+export function TraitPanel({ counterpartId, refreshSignal }: TraitPanelProps) {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -108,6 +116,9 @@ export function TraitPanel({ refreshSignal }: { refreshSignal?: string | null })
   const inFlight = useRef(false);
   const firstLoad = useRef(true);
   const alive = useRef(true);
+  /** Whose model the panel is currently showing, for discarding stale replies. */
+  const showing = useRef<string | null>(counterpartId ?? null);
+  const pendingFetch = useRef<AbortController | null>(null);
 
   const commit = useCallback((update: (current: Slot[]) => Slot[]) => {
     if (!alive.current) return;
@@ -170,14 +181,24 @@ export function TraitPanel({ refreshSignal }: { refreshSignal?: string | null })
   );
 
   const load = useCallback(async () => {
+    if (!counterpartId) return;
     // A slow backend must not stack requests behind a 2s poll.
     if (inFlight.current) return;
     inFlight.current = true;
 
+    const controller = new AbortController();
+    pendingFetch.current = controller;
+
     try {
-      const res = await fetch("/api/traits", { cache: "no-store" });
+      const res = await fetch(
+        `/api/traits?counterpartId=${encodeURIComponent(counterpartId)}`,
+        { cache: "no-store", signal: controller.signal },
+      );
       const data = (await res.json()) as TraitsResponse;
       if (!alive.current) return;
+      // Switching person mid-request would otherwise paint the old model over
+      // the new one, and the diff would read it as a wholesale correction.
+      if (showing.current !== counterpartId) return;
 
       if (!res.ok) throw new Error(data.error || `Trait model unavailable (${res.status})`);
 
@@ -185,17 +206,37 @@ export function TraitPanel({ refreshSignal }: { refreshSignal?: string | null })
       setError(null);
       setLoaded(true);
     } catch (err) {
-      if (!alive.current) return;
+      if (!alive.current || showing.current !== counterpartId) return;
       // Keep the last known model on screen. A blank panel mid-demo reads as a
       // broken product; a stale one with a warning reads as an offline backend.
       setError(err instanceof Error ? err.message : "Trait model unavailable");
     } finally {
-      inFlight.current = false;
+      // A request abandoned by a person-switch must not release the guard the
+      // switch's own request is already holding.
+      if (showing.current === counterpartId) inFlight.current = false;
+      if (pendingFetch.current === controller) pendingFetch.current = null;
     }
-  }, [apply]);
+  }, [apply, counterpartId]);
 
   useEffect(() => {
     alive.current = true;
+
+    // A different person is a different model, not a revision of this one, so
+    // the old cards are dropped outright rather than animated as supersessions.
+    showing.current = counterpartId ?? null;
+    pendingFetch.current?.abort();
+    pendingFetch.current = null;
+    inFlight.current = false;
+    for (const id of timers.current) clearTimeout(id);
+    timers.current.clear();
+    slotsRef.current = [];
+    setSlots([]);
+    setError(null);
+    setLoaded(false);
+    firstLoad.current = true;
+
+    if (!counterpartId) return;
+
     void load();
 
     const poll = setInterval(() => void load(), POLL_MS);
@@ -204,10 +245,11 @@ export function TraitPanel({ refreshSignal }: { refreshSignal?: string | null })
     return () => {
       alive.current = false;
       clearInterval(poll);
+      pendingFetch.current?.abort();
       for (const id of pending) clearTimeout(id);
       pending.clear();
     };
-  }, [load]);
+  }, [counterpartId, load]);
 
   // A correction has landed in Mongo. Waiting up to 2s to show it would put the
   // panel behind the retake the user is already hearing.
@@ -225,16 +267,22 @@ export function TraitPanel({ refreshSignal }: { refreshSignal?: string | null })
       <header className="traits__head">
         <h2 className="traits__title">Trait Model</h2>
         <span className="traits__count">
-          {loaded ? `${active} active` : "reading"}
+          {!counterpartId ? "—" : loaded ? `${active} active` : "reading"}
         </span>
       </header>
 
       {error && <p className="traits__error">{error}</p>}
 
       <div className="traits__list" aria-live="polite">
-        {loaded && slots.length === 0 && !error && (
+        {!counterpartId && (
           <p className="traits__empty">
-            No traits recorded. Seed the backend to populate the model.
+            Select a counterpart to see what the system believes about them.
+          </p>
+        )}
+
+        {counterpartId && loaded && slots.length === 0 && !error && (
+          <p className="traits__empty">
+            No traits recorded for this counterpart yet.
           </p>
         )}
 

@@ -1,4 +1,5 @@
-import { BackendError, getContext } from "@/lib/backend";
+import { NextRequest } from "next/server";
+import { BackendError, getContext, toCounterpartId } from "@/lib/backend";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,14 +12,22 @@ export const dynamic = "force-dynamic";
  * is written by /api/chat, and this route only ever reports the result.
  */
 
-const COUNTERPART_ID = "dana_reyes";
+/** Used when the picker hasn't resolved a selection yet. */
+const FALLBACK_COUNTERPART_ID = "dana_reyes";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Ids from the picker are already Mongo `_id` slugs; normalising costs
+  // nothing and keeps a hand-typed `dana-reyes` from 404ing.
+  const requested = request.nextUrl.searchParams.get("counterpartId");
+  const counterpartId = requested
+    ? toCounterpartId(requested)
+    : FALLBACK_COUNTERPART_ID;
+
   try {
-    const { activeTraits, evidence } = await getContext(COUNTERPART_ID);
+    const { activeTraits, evidence } = await getContext(counterpartId);
 
     return Response.json(
-      { activeTraits, evidence },
+      { counterpartId, activeTraits, evidence },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (err) {
@@ -26,12 +35,12 @@ export async function GET() {
     const message =
       err instanceof Error ? err.message : "Could not read the trait model";
 
-    console.warn("[traits]", message);
+    console.warn("[traits]", counterpartId, message);
 
     // Shape stays the same on failure so the panel can render an offline state
     // without special-casing the body.
     return Response.json(
-      { activeTraits: [], evidence: [], error: message },
+      { counterpartId, activeTraits: [], evidence: [], error: message },
       { status, headers: { "Cache-Control": "no-store" } },
     );
   }

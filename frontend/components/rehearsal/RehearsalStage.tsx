@@ -154,7 +154,10 @@ export function RehearsalStage() {
 
       {/* The write id changes on every stored correction, which is the cue to
           refetch rather than wait out the poll. */}
-      <TraitPanel refreshSignal={session.lastMemoryWrite?.documentId ?? null} />
+      <TraitPanel
+        counterpartId={selectedId}
+        refreshSignal={session.lastMemoryWrite?.documentId ?? null}
+      />
     </div>
   );
 }
