@@ -266,8 +266,8 @@ export function TraitPanel({ counterpartId, refreshSignal }: TraitPanelProps) {
     <aside className="traits">
       <header className="traits__head">
         <h2 className="traits__title">Trait Model</h2>
-        <span className="traits__count">
-          {!counterpartId ? "—" : loaded ? `${active} active` : "reading"}
+        <span className="traits__count" title="Active traits">
+          {!counterpartId || !loaded ? "—" : active}
         </span>
       </header>
 
@@ -305,11 +305,23 @@ function TraitCard({ slot }: { slot: Slot }) {
   return (
     <article className={`trait trait--${phase}`}>
       <div className="trait__head">
-        <span className="trait__category">{trait.category.replace(/_/g, " ")}</span>
-        <span className="trait__version">v{trait.version}</span>
+        <span className="trait__label">
+          {trait.supersedes && (
+            <span className="trait__revised" role="img" aria-label="Revised" />
+          )}
+          {trait.category.replace(/_/g, " ")}
+        </span>
+        <span className="trait__meta">
+          <span className="trait__value">{trait.confidence.toFixed(2)}</span>
+          <span className="trait__version">v{trait.version}</span>
+        </span>
       </div>
 
-      <p className="trait__claim">{trait.claim}</p>
+      {/* The inner span is what the strikethrough draws across — a background
+          gradient on an inline box, so it strikes every wrapped line. */}
+      <p className="trait__claim">
+        <span>{trait.claim}</span>
+      </p>
 
       <div
         className="trait__rail"
@@ -318,8 +330,6 @@ function TraitCard({ slot }: { slot: Slot }) {
       >
         <span className="trait__fill" style={{ width: `${pct}%` }} />
       </div>
-
-      {trait.supersedes && <span className="trait__revised">revised</span>}
     </article>
   );
 }
