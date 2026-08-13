@@ -80,16 +80,33 @@ export async function POST(request: NextRequest) {
   if (body.kind === "note" && context && backendSessionId) {
     try {
       // The backend supersedes a trait *within a category*, so a spoken note
-      // has to be resolved to one of the categories that actually exist.
-      const classified = await classifyNote(client, context, text);
-      const result = await submitCorrection(
-        counterpartId,
-        classified.category,
-        classified.claim,
-      );
+      // has to be resolved to the categories that actually exist. A note can
+      // legitimately touch more than one: "he'd go cold, not stay chatty"
+      // revises both conflict_response and conversation_style, and leaving the
+      // second one stale means the old behaviour simply outvotes the new one.
+      const { revisions } = await classifyNote(client, context, text);
 
-      correction = { id: result.activeTrait._id, summary: classified.claim };
-      memoryWrite = { collection: "traits", documentId: result.activeTrait._id };
+      const applied = [];
+      for (const revision of revisions) {
+        const result = await submitCorrection(
+          counterpartId,
+          revision.category,
+          revision.claim,
+        );
+        applied.push(result.activeTrait);
+      }
+
+      correction = {
+        id: applied[0]._id,
+        summary: revisions.map((r) => r.claim).join(" "),
+      };
+      memoryWrite = {
+        collection: "traits",
+        documentId:
+          applied.length > 1
+            ? `${applied[0]._id} +${applied.length - 1} more`
+            : applied[0]._id,
+      };
 
       // Re-read so the retake is generated against the corrected persona.
       context = await getContext(counterpartId);
@@ -173,7 +190,7 @@ async function classifyNote(
   client: Anthropic,
   context: CounterpartContext,
   note: string,
-): Promise<{ category: string; claim: string }> {
+): Promise<{ revisions: { category: string; claim: string }[] }> {
   const categories = context.activeTraits.map((t) => t.category);
   const current = context.activeTraits
     .map((t) => `- ${t.category}: ${t.claim}`)
@@ -181,7 +198,7 @@ async function classifyNote(
 
   const message = await client.messages.create({
     model: MODEL,
-    max_tokens: 512,
+    max_tokens: 1024,
     thinking: { type: "disabled" },
     output_config: {
       effort: "low",
@@ -190,23 +207,37 @@ async function classifyNote(
         schema: {
           type: "object",
           properties: {
-            category: { type: "string", enum: categories },
-            claim: {
-              type: "string",
-              description:
-                "The corrected trait, rewritten as a third-person statement " +
-                "about how they behave. Under 15 words.",
+            // No minItems/maxItems — the API rejects array constraints in
+            // structured-output schemas. Bounds are enforced below instead.
+            revisions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  category: { type: "string", enum: categories },
+                  claim: {
+                    type: "string",
+                    description:
+                      "The corrected trait, rewritten as a third-person " +
+                      "statement about how they behave. Under 15 words.",
+                  },
+                },
+                required: ["category", "claim"],
+                additionalProperties: false,
+              },
             },
           },
-          required: ["category", "claim"],
+          required: ["revisions"],
           additionalProperties: false,
         },
       },
     },
     system:
       "You maintain a behavioural model of a person. The director just " +
-      "corrected one of its traits. Pick the single existing category the " +
-      "correction revises, and rewrite that trait to match.",
+      "corrected it. Revise every existing trait the correction contradicts — " +
+      "usually one, but if another trait would still produce the behaviour " +
+      "the director just rejected, revise that one too. Do not revise traits " +
+      "the correction leaves untouched. One revision per category.",
     messages: [
       {
         role: "user",
@@ -221,11 +252,26 @@ async function classifyNote(
 
   if (!raw) throw new Error("classifier returned nothing");
 
-  const parsed = JSON.parse(raw) as { category: string; claim: string };
-  if (!categories.includes(parsed.category)) {
-    throw new Error(`classifier chose unknown category "${parsed.category}"`);
+  const parsed = JSON.parse(raw) as {
+    revisions: { category: string; claim: string }[];
+  };
+
+  // Guard the enum and de-duplicate: the backend supersedes one trait per
+  // category, so two revisions of the same category would fight each other.
+  const seen = new Set<string>();
+  const revisions = (parsed.revisions ?? [])
+    .filter((r) => {
+      if (!categories.includes(r.category) || seen.has(r.category)) return false;
+      seen.add(r.category);
+      return true;
+    })
+    // One note shouldn't rewrite the whole personality.
+    .slice(0, 3);
+
+  if (revisions.length === 0) {
+    throw new Error("classifier matched no known trait category");
   }
-  return parsed;
+  return { revisions };
 }
 
 /** Rebuilds the character sheet from what MongoDB currently believes. */
@@ -259,7 +305,11 @@ function buildSystem(ctx: CounterpartContext): string {
     .map((t) => `- ${t.claim}`)
     .join("\n");
 
-  return `You are ${c.name}, ${c.role}. ${c.scenario}
+  const them = c.userRole ? `the person you are speaking with (${c.userRole})` : "the other person";
+
+  return `You are ${c.name}, ${c.role}.
+${c.scenario}
+You are speaking with ${c.userRole || "the other person"}.
 Never mention being an AI. Never break character.
 
 BEHAVIOR
@@ -288,9 +338,9 @@ Start every reply with [pace|energy|manner], then the line.
 Use "..." to trail off, "—" to cut yourself off.
 
 RULES
-Do not resolve this. Do not soften because Sam argued well once.
+Do not resolve this. Do not soften because ${them} argued well once.
 Concede only from the list, only after three turns of pressure.
-Never coach Sam. Never say "that's fair."
+Never coach ${them}. Never say "that's fair."
 Do not include internal or system XML tags in your response.
 Output only the delivery tag and the line.`;
 }

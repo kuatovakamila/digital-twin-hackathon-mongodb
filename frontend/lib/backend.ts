@@ -12,6 +12,8 @@ export interface Counterpart {
   name: string;
   role: string;
   scenario: string;
+  /** Who *you* are in this scene, e.g. "his tenant of four years". */
+  userRole?: string;
   wants: string;
   concessions: string[];
   boundaries: string[];
@@ -21,6 +23,16 @@ export interface Counterpart {
     fragmentsWhenTense: boolean;
     usesFiller: boolean;
   };
+}
+
+/** Summary shape returned by the list endpoint. */
+export interface CounterpartSummary {
+  _id: string;
+  name: string;
+  role: string;
+  scenario: string;
+  userRole?: string;
+  activeTraits: number;
 }
 
 export interface Trait {
@@ -88,6 +100,38 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return res.json() as Promise<T>;
+}
+
+export function listCounterparts(): Promise<{ counterparts: CounterpartSummary[] }> {
+  return call("/api/counterparts");
+}
+
+/** Shape the backend expects when creating a person. */
+export interface CounterpartDraft {
+  name: string;
+  role: string;
+  userRole?: string;
+  scenario: string;
+  wants: string;
+  concessions: string[];
+  boundaries: string[];
+  escalation: string;
+  speechRules: {
+    maximumWords: number;
+    fragmentsWhenTense: boolean;
+    usesFiller: boolean;
+  };
+  /** Keyed by trait category — these become the versioned, correctable traits. */
+  traits: Record<string, { claim: string; confidence: number }>;
+}
+
+export function createCounterpart(
+  draft: CounterpartDraft,
+): Promise<{ counterpart: Counterpart; traits: Trait[] }> {
+  return call("/api/counterparts", {
+    method: "POST",
+    body: JSON.stringify(draft),
+  });
 }
 
 export function getContext(counterpartId: string): Promise<CounterpartContext> {

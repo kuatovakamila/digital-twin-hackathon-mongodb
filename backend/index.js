@@ -71,6 +71,120 @@ async function startServer() {
     });
 
     app.get(
+      "/api/counterparts",
+      asyncHandler(async (req, res) => {
+        const counterparts = await db
+          .collection("counterparts")
+          .find({}, { projection: { name: 1, role: 1, scenario: 1, userRole: 1 } })
+          .sort({ name: 1 })
+          .toArray();
+
+        const counts = await db
+          .collection("traits")
+          .aggregate([
+            { $match: { status: "active" } },
+            { $group: { _id: "$counterpartId", activeTraits: { $sum: 1 } } },
+          ])
+          .toArray();
+
+        const byId = Object.fromEntries(counts.map((c) => [c._id, c.activeTraits]));
+
+        res.json({
+          counterparts: counterparts.map((c) => ({
+            ...c,
+            activeTraits: byId[c._id] || 0,
+          })),
+        });
+      })
+    );
+
+    app.post(
+      "/api/counterparts",
+      asyncHandler(async (req, res) => {
+        const name = requireString(req.body.name, "name");
+        const role = requireString(req.body.role, "role");
+        const scenario = requireString(req.body.scenario, "scenario");
+        const traitsInput = req.body.traits;
+
+        if (typeof traitsInput !== "object" || traitsInput === null || Array.isArray(traitsInput)) {
+          throw new HttpError(400, '"traits" must be an object keyed by category');
+        }
+        const traitEntries = Object.entries(traitsInput);
+        if (traitEntries.length === 0) {
+          throw new HttpError(400, '"traits" must contain at least one category');
+        }
+
+        // Slugify the name into a readable _id, and de-duplicate if taken.
+        const base =
+          (typeof req.body._id === "string" && req.body._id.trim()) ||
+          name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+        let counterpartId = base;
+        for (let n = 2; await db.collection("counterparts").findOne({ _id: counterpartId }); n++) {
+          counterpartId = `${base}_${n}`;
+        }
+
+        const now = new Date();
+
+        const counterpartDoc = {
+          _id: counterpartId,
+          name,
+          role,
+          userRole: typeof req.body.userRole === "string" ? req.body.userRole : null,
+          scenario,
+          wants: typeof req.body.wants === "string" ? req.body.wants : "",
+          concessions: Array.isArray(req.body.concessions) ? req.body.concessions : [],
+          boundaries: Array.isArray(req.body.boundaries) ? req.body.boundaries : [],
+          escalation: typeof req.body.escalation === "string" ? req.body.escalation : "",
+          speechRules: {
+            maximumWords: Number(req.body.speechRules?.maximumWords) || 35,
+            fragmentsWhenTense: Boolean(req.body.speechRules?.fragmentsWhenTense),
+            usesFiller: Boolean(req.body.speechRules?.usesFiller),
+          },
+          fictional: true,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        const traitDocs = traitEntries.map(([category, value]) => {
+          const claim = requireString(
+            typeof value === "string" ? value : value?.claim,
+            `traits.${category}`
+          );
+          const confidence = Number(
+            typeof value === "object" && value ? value.confidence : undefined
+          );
+          return {
+            _id: `trait_${counterpartId}_${category}_v1`,
+            counterpartId,
+            category: requireString(category, "trait category"),
+            claim,
+            confidence: Number.isFinite(confidence) ? confidence : 0.7,
+            status: "active",
+            version: 1,
+            evidenceIds: [],
+            createdAt: now,
+            updatedAt: now,
+          };
+        });
+
+        const session = client.startSession();
+        try {
+          await session.withTransaction(async () => {
+            await db.collection("counterparts").insertOne(counterpartDoc, { session });
+            await db.collection("traits").insertMany(traitDocs, { session });
+          });
+        } finally {
+          await session.endSession();
+        }
+
+        res.status(201).json({
+          counterpart: counterpartDoc,
+          traits: traitDocs,
+        });
+      })
+    );
+
+    app.get(
       "/api/counterparts/:id/context",
       asyncHandler(async (req, res) => {
         const counterpartId = req.params.id;

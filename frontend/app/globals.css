@@ -412,3 +412,121 @@ code {
   font-size: 0.82rem;
   white-space: nowrap;
 }
+
+/* --- counterpart picker --- */
+
+.picker {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.picker__card {
+  flex: 1 1 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.picker__card:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.picker__card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.picker__card--active {
+  border-color: var(--accent);
+  background: rgba(110, 231, 183, 0.08);
+}
+
+.picker__name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.picker__role {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.picker__traits {
+  font-size: 0.68rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+}
+
+.stage__you {
+  color: var(--text);
+}
+
+/* --- add a counterpart --- */
+
+.btn--add {
+  align-self: flex-start;
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(110, 231, 183, 0.05);
+}
+
+.add__input {
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  resize: vertical;
+}
+
+.add__input:focus {
+  outline: none;
+  border-color: var(--muted);
+}
+
+.add__input::placeholder {
+  color: #5a6673;
+}
+
+.add__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.add__hint {
+  flex: 1;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.add__error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #ffb4ad;
+}
