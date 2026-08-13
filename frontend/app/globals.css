@@ -1,20 +1,634 @@
-@import "tailwindcss";
-
 :root {
-  --background: #0b0b0d;
-  --foreground: #e8e8ea;
+  --bg: #0b0d10;
+  --panel: #14181d;
+  --line: #232a32;
+  --text: #e7ecf2;
+  --muted: #8b97a6;
+  --accent: #6ee7b7;
+  --warn: #f0a868;
+  --danger: #f0736a;
+  color-scheme: dark;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
 }
 
 html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+kbd {
+  background: var(--line);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+}
+
+code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+  color: var(--accent);
+}
+
+.stage {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 24px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 100vh;
+}
+
+.stage__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stage__head h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  letter-spacing: -0.02em;
+}
+
+.stage__role {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.stage__scene {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  border-left: 2px solid var(--line);
+  padding-left: 12px;
+}
+
+.stage__phase {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+  padding-top: 6px;
+}
+
+.stage__phase .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.stage__phase--listening .dot {
+  background: var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.stage__phase--thinking .dot {
+  background: var(--warn);
+  animation: pulse 0.8s ease-in-out infinite;
+}
+.stage__phase--speaking .dot {
+  background: #7dd3fc;
+}
+.stage__phase--directing .dot {
+  background: var(--danger);
+  animation: pulse 0.6s ease-in-out infinite;
+}
+.stage__phase--directing {
+  color: var(--danger);
+}
+
+.stage__error {
+  margin: 0;
+  background: rgba(240, 115, 106, 0.12);
+  border: 1px solid rgba(240, 115, 106, 0.4);
+  color: #ffb4ad;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.stage__memory {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* --- transcript --- */
+
+.feed {
+  flex: 1;
+  min-height: 280px;
+  max-height: 52vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.feed__empty {
+  margin: auto;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 42ch;
+  line-height: 1.6;
+}
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.turn__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.turn__delivery {
+  color: #7dd3fc;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: ui-monospace, monospace;
+}
+
+.turn__retake {
+  color: var(--danger);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 0.65rem;
+}
+
+.turn__text {
+  margin: 0;
+  line-height: 1.55;
+  font-size: 1rem;
+}
+
+.turn--user .turn__text {
+  color: var(--text);
+}
+.turn--persona .turn__text {
+  color: #cfe4ff;
+}
+.turn--director .turn__text {
+  color: var(--danger);
+  font-style: italic;
+}
+.turn--interim .turn__text {
+  color: var(--muted);
+}
+.turn--directing .turn__text {
+  color: var(--danger);
+}
+
+/* --- controls --- */
+
+.stage__controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.stage__buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #062018;
+  font-weight: 600;
+}
+
+.btn--interrupt {
+  border-color: rgba(240, 115, 106, 0.5);
+  color: #ffb4ad;
+}
+.btn--interrupt:active:not(:disabled) {
+  background: rgba(240, 115, 106, 0.2);
+}
+
+/* --- mic orb --- */
+
+.orb {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+
+.orb__core {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background 200ms ease;
+}
+
+.orb__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+}
+
+.orb--listening .orb__core {
+  background: var(--accent);
+}
+.orb--listening .orb__ring {
+  border-color: var(--accent);
+  animation: ripple 1.6s ease-out infinite;
+}
+
+.orb--thinking .orb__core {
+  background: var(--warn);
+}
+.orb--thinking .orb__ring {
+  border-color: var(--warn);
+  border-top-color: transparent;
+  animation: spin 1s linear infinite;
+}
+
+.orb--speaking .orb__core {
+  background: #7dd3fc;
+  animation: pulse 0.7s ease-in-out infinite;
+}
+.orb--speaking .orb__ring {
+  border-color: #7dd3fc;
+}
+
+.orb--directing .orb__core {
+  background: var(--danger);
+}
+.orb--directing .orb__ring {
+  border-color: var(--danger);
+  animation: ripple 1s ease-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0.7);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+  }
+}
+
+/* --- test bench --- */
+
+.bench {
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bench__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bench__title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.bench__row {
+  display: flex;
+  gap: 8px;
+}
+
+.bench__input {
+  flex: 1;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.bench__input:focus {
+  outline: none;
+  border-color: var(--muted);
+}
+
+.bench__input::placeholder {
+  color: #5a6673;
+}
+
+.bench__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.btn--tiny {
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+/* --- trait model panel --- */
+
+/*
+ * Calm easing throughout: the panel is on a projector behind a live demo, so
+ * movement has to be readable at a glance and never draw the eye off the
+ * conversation. Ease-out, no overshoot, nothing that bounces.
+ */
+:root {
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.room {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: start;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.traits {
+  position: sticky;
+  top: 0;
+  min-height: 100vh;
+  padding: 40px 24px 56px;
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.traits__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.traits__title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text);
+}
+
+.traits__count {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.traits__error {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--warn);
+}
+
+.traits__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.traits__empty,
+.traits__foot {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.traits__foot {
+  margin-top: auto;
+  padding-top: 16px;
+  opacity: 0.75;
+}
+
+.trait {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px 14px;
+}
+
+.trait__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.trait__category {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--muted);
+}
+
+.trait__version {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.trait__claim {
+  margin: 8px 0 12px;
+  font-size: 1rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.trait__rail {
+  height: 2px;
+  background: var(--line);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.trait__fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 500ms var(--ease);
+}
+
+.trait__revised {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--muted);
+}
+
+/* Superseded: struck through, then gone. Held legible for the first third so
+   the change is readable rather than merely animated. */
+.trait--exiting {
+  animation: trait-exit 600ms var(--ease) forwards;
+  pointer-events: none;
+}
+
+.trait--exiting .trait__claim {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.trait--exiting .trait__fill {
+  background: var(--muted);
+}
+
+/* Arrives in the slot the old claim just left. */
+.trait--entering {
+  animation:
+    trait-enter 480ms var(--ease) both,
+    trait-glow 2000ms var(--ease) both;
+}
+
+@keyframes trait-exit {
+  0% {
+    opacity: 1;
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes trait-enter {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes trait-glow {
+  0% {
+    border-color: var(--accent);
+    box-shadow:
+      0 0 0 1px rgba(110, 231, 183, 0.35),
+      0 0 26px rgba(110, 231, 183, 0.2);
+  }
+  55% {
+    border-color: rgba(110, 231, 183, 0.45);
+    box-shadow:
+      0 0 0 1px rgba(110, 231, 183, 0.14),
+      0 0 16px rgba(110, 231, 183, 0.09);
+  }
+  100% {
+    border-color: var(--line);
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 1040px) {
+  .room {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .traits {
+    position: static;
+    min-height: 0;
+    border-left: none;
+    border-top: 1px solid var(--line);
+    padding-top: 28px;
+  }
 }
